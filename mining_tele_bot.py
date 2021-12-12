@@ -28,11 +28,13 @@ logging.basicConfig(
 try:
     TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
     TELEGRAM_CHAT_ID = os.environ['TELEGRAM_CHAT_ID']
-    BIN_API = os.environ['TELEGRAM_CHAT_ID']
 except Exception as e:
     raise logging.error(f'Token error: {e}. Работа не возможна.')
-EP_POOL_STAT = 'https://rvn.2miners.com/api/accounts/RJph4xK73HBAG2C7uRfD8FBSvWSgKRw4rt'
-# EP_MINER_STAT = 'https://api-ravencoin.flypool.org/miner/:RJph4xK73HBAG2C7uRfD8FBSvWSgKRw4rt/dashboard'
+EP_POOL_ALL = {
+    'EP_2MINER_RVN' : 'https://rvn.2miners.com/api/accounts/RJph4xK73HBAG2C7uRfD8FBSvWSgKRw4rt',
+    'EP_FLYPOOL_RVN' : 'https://api-ravencoin.flypool.org/miner/:RJph4xK73HBAG2C7uRfD8FBSvWSgKRw4rt/dashboard',
+    
+}
 EP_ALL_RIGS = {
     'EP_RIG_1': 'http://192.168.1.52:10293/api/v1/status',
     'EP_RIG_2': 'http://192.168.1.52:10294/api/v1/status',
@@ -48,7 +50,7 @@ EP_BIN_API = {
 }
 SLEEP_TIME = 20  # цикл работы в секундах
 TIMEOUT_ERROR = 3600  # 3600 - час
-TEMP_LIMIT = 63  # 63 - градусы
+TEMP_LIMIT = 64  # 63 - градусы
 
 
 def api_error(response):
@@ -103,8 +105,8 @@ def parse_problem_from_rig(response_mi):
             e1 = id['temperature']
             e2 = id['info']
             timestamp_err = int(time.time()) + TIMEOUT_ERROR
-            logging.warning(f'На {e2} - температура: {e1}.')
-            return (f'На {e2} - температура: {e1}.')
+            logging.warning(f'Перегрев на {e2} - температура: {e1}.')
+            return (f'Перегрев на {e2} - температура: {e1}.')
         return None
 
 
@@ -124,17 +126,21 @@ def wake_up(update, context):
 
 def miner_stat(update, context):
     """Бот. Парсит данные майнинга с сайта пула. /miner_stat."""
-    response = get_api_answer(EP_POOL_STAT)
-    hr_30min = (response['currentHashrate'])
-    hr_6h = (response['hashrate'])
-    status = not response['workers']['0']['offline']
-    message_stat = (
-        f'Хешрейт за 30 мин: {hr_30min/1000000:.2f} MH/s \n'
-        f'Хешрейт за 6 часов: {hr_6h/1000000:.2f} MH/s \n'
-        f'Статус: {status}\n'
-    )
-    send_message(context.bot, message_stat)
-
+    for pool, adress in EP_POOL_ALL.items():
+        response = get_api_answer(adress)
+        try:
+            hr_30min = response['currentHashrate'] or response['data']['currentStatistics']['currentHashrate']
+            hr_6h = response['hashrate'] or response['data']['currentStatistics']['averageHashrate']
+            status = not response['workers']['0']['offline'] or response['status']
+            message_stat = (
+                f'Пул: {pool}.\n'
+                f'Хешрейт за 30 мин: {hr_30min/1000000:.2f} MH/s \n'
+                f'Хешрейт за 6 часов: {hr_6h/1000000:.2f} MH/s \n'
+                f'Статус: {status}\n'
+            )
+            send_message(context.bot, message_stat)
+        except:
+            logging.debug(f'Отсутствуют данные по пулу {pool}.')
 
 def rig_stat(update, context):
     """Бот. Парсит данные майнинга с рига. gminer /rig_stat."""
