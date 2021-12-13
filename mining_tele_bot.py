@@ -35,9 +35,11 @@ EP_POOL_ALL = {
     'EP_FLYPOOL_RVN' : 'https://api-ravencoin.flypool.org/miner/:RJph4xK73HBAG2C7uRfD8FBSvWSgKRw4rt/dashboard',
     
 }
+#  Ethpool, Ethermine & Flypool. имеют общий endpoint API, но лучше уточнять, особенно Fly:
+#  'https://api.ethermine.org/miner/:0x8154b8c38d3b53010f878bad4b3864119771f9d2/dashboard' .
 EP_ALL_RIGS = {
-    'EP_RIG_1': 'http://192.168.1.52:10293/api/v1/status',
-    'EP_RIG_2': 'http://192.168.1.52:10294/api/v1/status',
+    'EP_RIG_1': 'http://192.168.1.52:10293/stat',
+    'EP_RIG_2': 'http://192.168.1.52:10294/stat',
 }
 EP_BIN_API = {
     'BIN_API_BTC....': 'https://api2.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT',
@@ -50,8 +52,8 @@ EP_BIN_API = {
 }
 SLEEP_TIME = 20  # цикл работы в секундах
 TIMEOUT_ERROR = 3600  # 3600 - час
-TEMP_LIMIT = 64  # 63 - градусы
-
+GPU_TEMP_LIMIT = 62  # 63 - градусы
+MEM_TEMP_LIMIT = 97
 
 def api_error(response):
     """Логируем ответ, если он не 200."""
@@ -97,16 +99,17 @@ def send_message(bot, message):
 
 def parse_problem_from_rig(response_mi):
     """Парсит API с рига, готовит сообщение, если перегрев."""
-    devices_all = response_mi['miner']['devices']
+    devices_all = response_mi['devices']
     global timestamp_err
     for id in devices_all:
         # Если есть перегрев, то спамит в Телегу раз в час.
-        if int(id['temperature']) > TEMP_LIMIT and timestamp_err < int(time.time()):
+        if (int(id['temperature']) > GPU_TEMP_LIMIT or int(id['memory_temperature']) > MEM_TEMP_LIMIT) and timestamp_err < int(time.time()):
             e1 = id['temperature']
-            e2 = id['info']
+            e2 = id['name']
+            e3 = id['memory_temperature']
             timestamp_err = int(time.time()) + TIMEOUT_ERROR
-            logging.warning(f'Перегрев на {e2} - температура: {e1}.')
-            return (f'Перегрев на {e2} - температура: {e1}.')
+            logging.warning(f'Перегрев на {e2} - температура: {e1} память: {e3}.')
+            return (f'Перегрев на {e2} - температура: {e1} память: {e3}.')
         return None
 
 
@@ -115,7 +118,7 @@ def wake_up(update, context):
     chat = update.effective_chat
     name = update.message.chat.first_name
     button = telegram.ReplyKeyboardMarkup([
-        ['/miner_stat', '/coin_stat', '/rig_stat']
+        ['/pool_stat', '/coin_stat', '/rig_stat']
     ], resize_keyboard=True)
     context.bot.send_message(
         chat_id=chat.id,
@@ -124,7 +127,7 @@ def wake_up(update, context):
     )
 
 
-def miner_stat(update, context):
+def pool_stat(update, context):
     """Бот. Парсит данные майнинга с сайта пула. /miner_stat."""
     for pool, adress in EP_POOL_ALL.items():
         response = get_api_answer(adress)
@@ -147,22 +150,24 @@ def rig_stat(update, context):
     for rig, endpoint in EP_ALL_RIGS.items():
         message_stat = rig + '\n'
         response = get_api_answer(endpoint)
-        start_time = datetime.datetime.fromtimestamp(response['start_time'])
         uptime = datetime.timedelta(seconds=response['uptime'])
+        start_time = datetime.datetime.fromtimestamp(int(time.time())) - uptime
         status = response['extended_share_info']
-        hr = response['miner']['total_hashrate']
+        hr = response['pool_speed']
         message_stat += (
             f'start_time: {start_time} \n'
             f'uptime: {uptime} \n'
             f'Статус: {status} \n'
             f'Хешрэйт в майнере: {hr/1000000:.2f} MH/s\n'
         )
-        devices = response['miner']['devices']
+        devices = response['devices']
         for device in devices:
-            d1 = device['info']
-            d2 = device['temperature']
-            d3 = device['hashrate']
-            add_message = f'{d1} t: {d2} hr: {d3/1000000:.2f} MH/s\n'
+            name = device['name']
+            fan = device['fan']
+            temp = device['temperature']
+            m_temp = device['memory_temperature']
+            hr = device['speed']
+            add_message = f'{name} t: {temp} tm: {m_temp} fan: {fan} hr: {hr/1000000:.2f} MH/s\n'
             message_stat += add_message
         send_message(context.bot, message_stat)
 
@@ -186,7 +191,7 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     updater = Updater(token=TELEGRAM_TOKEN)
     updater.dispatcher.add_handler(CommandHandler('start', wake_up))
-    updater.dispatcher.add_handler(CommandHandler('miner_stat', miner_stat))
+    updater.dispatcher.add_handler(CommandHandler('pool_stat', pool_stat))
     updater.dispatcher.add_handler(CommandHandler('rig_stat', rig_stat))
     updater.dispatcher.add_handler(CommandHandler('coin_stat', coin_stat))
     global timestamp_err
