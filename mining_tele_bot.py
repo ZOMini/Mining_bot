@@ -38,6 +38,7 @@ EP_POOL_ALL = {
 #  Ethpool, Ethermine & Flypool. имеют общий endpoint API, но лучше уточнять, особенно Fly:
 #  'https://api.ethermine.org/miner/:0x8154b8c38d3b53010f878bad4b3864119771f9d2/dashboard' .
 EP_ALL_RIGS = {
+    # Здесь нужно указывать внутренний IP ригов.
     'EP_RIG_1': 'http://192.168.1.52:10293/stat',
     'EP_RIG_2': 'http://192.168.1.52:10294/stat',
 }
