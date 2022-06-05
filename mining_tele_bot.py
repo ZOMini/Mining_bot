@@ -158,7 +158,7 @@ def rig_stat(update, context):
             f'start_time: {start_time} \n'
             f'uptime: {uptime} \n'
             f'Статус: {status} \n'
-            f'Хешрэйт в майнере: {hr/1000000:.2f} MH/s\n'
+            f'Хешрэйт по факту: {hr/1000000:.2f} MH/s\n'
         )
         devices = response['devices']
         for device in devices:
